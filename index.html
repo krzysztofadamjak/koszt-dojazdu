@@ -2,13 +2,12 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8" />
-<title>Kalkulator kosztu dojazdu - z adresami</title>
+<title>Kalkulator kosztu dojazdu</title>
 <style>
   body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1em; }
   label { display: block; margin-top: 1em; }
   input, button { width: 100%; padding: 0.5em; margin-top: 0.2em; }
   #wynik { margin-top: 1em; background: #f0f0f0; padding: 1em; border-radius: 8px; }
-  a { color: blue; }
 </style>
 </head>
 <body>
@@ -86,6 +85,11 @@
     const costPerDay = fuelUsedPerDay * fuelPrice;
     const monthlyCost = costPerDay * days;
 
+    const roundTripDurationMinutes = duration * 2;
+    const monthlyDurationMinutes = roundTripDurationMinutes * days;
+    const hours = Math.floor(monthlyDurationMinutes / 60);
+    const minutes = monthlyDurationMinutes % 60;
+
     wynik.innerHTML = `
       <p><strong>Dystans (w jedną stronę):</strong> ${distance.toFixed(1)} km</p>
       <p><strong>Czas przejazdu (w jedną stronę):</strong> ${duration} minut</p>
@@ -93,6 +97,7 @@
       <p><strong>Zużycie paliwa (na jeden dzień):</strong> ${fuelUsedPerDay.toFixed(2)} l</p>
       <p><strong>Koszt dojazdu jednego dnia:</strong> ${costPerDay.toFixed(2)} zł</p>
       <p><strong>Szacunkowy koszt miesięczny (za ${days} dni):</strong> <strong>${monthlyCost.toFixed(2)} zł</strong></p>
+      <p><strong>Czas spędzony na dojazdach miesięcznie:</strong> ${hours} godz. i ${minutes} min.</p>
     `;
   }
 </script>
