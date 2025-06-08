@@ -2,52 +2,28 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kalkulator kosztu dojazdu do pracy</title>
+  <title>Kalkulator kosztu dojazdu</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 2rem auto;
-      padding: 1rem;
-    }
-    h1 {
-      text-align: center;
-      color: #333;
-    }
-    label {
-      display: block;
-      margin-top: 1rem;
-    }
-    input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      font-size: 1rem;
-    }
-    #wynik {
-      margin-top: 2rem;
-      background: #f4f4f4;
-      padding: 1rem;
-      border-radius: 8px;
-    }
+    body { font-family: Arial, sans-serif; padding: 1em; max-width: 600px; margin: auto; }
+    label { display: block; margin-top: 1em; }
+    input, select, button { width: 100%; padding: 0.5em; margin-top: 0.2em; }
+    #map { height: 0; visibility: hidden; }
+    #wynik { margin-top: 1em; padding: 1em; background: #f0f0f0; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h1>Kalkulator kosztu dojazdu</h1>
+  <h2>Kalkulator dojazdu do pracy</h2>
 
-  <label>Województwo:
-    <select id="woj">
-      <option value="">— wybierz —</option>
-      <option value="mazowieckie">Mazowieckie</option>
-      <option value="wielkopolskie">Wielkopolskie</option>
-      <option value="małopolskie">Małopolskie</option>
-      <option value="śląskie">Śląskie</option>
-    </select>
+  <label>Adres domowy:
+    <input id="home" type="text" placeholder="np. Warszawa, ul. Długa 5" />
+  </label>
+
+  <label>Adres pracy:
+    <input id="work" type="text" placeholder="np. Warszawa, ul. Krótka 1" />
   </label>
 
   <label>Rodzaj paliwa:
-    <select id="paliwo">
+    <select id="fuel">
       <option value="95">PB95</option>
       <option value="98">PB98</option>
       <option value="ON">Diesel</option>
@@ -55,56 +31,86 @@
     </select>
   </label>
 
+  <label>Województwo:
+    <select id="region">
+      <option value="mazowieckie">Mazowieckie</option>
+      <option value="małopolskie">Małopolskie</option>
+      <option value="wielkopolskie">Wielkopolskie</option>
+    </select>
+  </label>
+
   <label>Średnie spalanie (l/100 km):
-    <input type="number" id="spalanie" value="7.5" step="0.1" min="1">
+    <input type="number" id="consumption" value="7.0" step="0.1">
   </label>
 
-  <label>Dystans w jedną stronę (km):
-    <input type="number" id="km" value="10" step="0.1" min="0">
-  </label>
-
-  <label>Liczba dni dojazdu w miesiącu:
-    <input type="number" id="dni" value="20" min="1" max="31">
-  </label>
-
-  <button id="oblicz">Oblicz koszt</button>
+  <button onclick="oblicz()">Oblicz koszt i czas</button>
 
   <div id="wynik"></div>
+  <div id="map"></div>
 
   <script>
     const cenyPaliw = {
       mazowieckie: { "95": 5.72, "98": 6.49, "ON": 5.88, "LPG": 2.93 },
-      wielkopolskie: { "95": 5.68, "98": 6.42, "ON": 5.81, "LPG": 2.89 },
       małopolskie: { "95": 5.75, "98": 6.55, "ON": 5.90, "LPG": 2.95 },
-      śląskie: { "95": 5.70, "98": 6.50, "ON": 5.85, "LPG": 2.91 }
+      wielkopolskie: { "95": 5.68, "98": 6.42, "ON": 5.81, "LPG": 2.89 }
     };
 
-    document.getElementById("oblicz").addEventListener("click", () => {
-      const woj = document.getElementById("woj").value;
-      const paliwo = document.getElementById("paliwo").value;
-      const spalanie = parseFloat(document.getElementById("spalanie").value);
-      const km = parseFloat(document.getElementById("km").value);
-      const dni = parseInt(document.getElementById("dni").value);
+    let map, directionsService;
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 52.2297, lng: 21.0122 },
+        zoom: 12
+      });
+      directionsService = new google.maps.DirectionsService();
+
+      new google.maps.places.Autocomplete(document.getElementById("home"));
+      new google.maps.places.Autocomplete(document.getElementById("work"));
+    }
+
+    function oblicz() {
+      const origin = document.getElementById("home").value;
+      const destination = document.getElementById("work").value;
+      const fuel = document.getElementById("fuel").value;
+      const region = document.getElementById("region").value;
+      const spalanie = parseFloat(document.getElementById("consumption").value);
       const wynik = document.getElementById("wynik");
 
-      if (!woj || !paliwo || isNaN(spalanie) || isNaN(km) || isNaN(dni)) {
+      if (!origin || !destination || isNaN(spalanie)) {
         wynik.innerHTML = "<p style='color:red;'>Uzupełnij wszystkie pola poprawnie.</p>";
         return;
       }
 
-      const cena = cenyPaliw[woj][paliwo];
-      const dzienneKm = km * 2;
-      const miesiecznyKm = dzienneKm * dni;
-      const zuzycie = (miesiecznyKm * spalanie) / 100;
-      const koszt = zuzycie * cena;
+      directionsService.route(
+        {
+          origin,
+          destination,
+          travelMode: google.maps.TravelMode.DRIVING
+        },
+        (response, status) => {
+          if (status === "OK") {
+            const distanceKm = response.routes[0].legs[0].distance.value / 1000;
+            const duration = response.routes[0].legs[0].duration.text;
+            const cena = cenyPaliw[region][fuel];
+            const zuzycie = (distanceKm * spalanie) / 100;
+            const koszt = zuzycie * cena;
 
-      wynik.innerHTML = `
-        <p><strong>Cena paliwa:</strong> ${cena.toFixed(2)} zł/l</p>
-        <p><strong>Przebieg miesięczny:</strong> ${miesiecznyKm.toFixed(1)} km</p>
-        <p><strong>Zużycie paliwa:</strong> ${zuzycie.toFixed(1)} l</p>
-        <p><strong>Koszt dojazdu:</strong> <em>${koszt.toFixed(2)} zł</em></p>
-      `;
-    });
+            wynik.innerHTML = `
+              <p><strong>Dystans:</strong> ${distanceKm.toFixed(1)} km</p>
+              <p><strong>Średni czas przejazdu:</strong> ${duration}</p>
+              <p><strong>Zużycie paliwa:</strong> ${zuzycie.toFixed(1)} l</p>
+              <p><strong>Koszt jednego dojazdu:</strong> <strong>${koszt.toFixed(2)} zł</strong></p>
+            `;
+          } else {
+            wynik.innerHTML = "<p style='color:red;'>Nie udało się obliczyć trasy.</p>";
+          }
+        }
+      );
+    }
+  </script>
+
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap">
   </script>
 </body>
 </html>
