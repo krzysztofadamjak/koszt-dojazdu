@@ -2,24 +2,39 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8" />
-<title>Kalkulator kosztu dojazdu - ręczna cena paliwa</title>
+<title>Kalkulator kosztu dojazdu - z adresami</title>
 <style>
   body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1em; }
   label { display: block; margin-top: 1em; }
   input, button { width: 100%; padding: 0.5em; margin-top: 0.2em; }
   #wynik { margin-top: 1em; background: #f0f0f0; padding: 1em; border-radius: 8px; }
+  a { color: blue; }
 </style>
 </head>
 <body>
 
-<h2>Kalkulator kosztu dojazdu do pracy</h2>
+<h2>Kalkulator kosztu dojazdu</h2>
 
-<label>Adres domowy:
-  <input id="home" type="text" placeholder="np. Warszawa, ul. Długa 5" />
+<label>Adres startowy:
+  <input id="start" type="text" placeholder="np. Warszawa, ul. Długa 5" />
 </label>
 
-<label>Adres pracy:
-  <input id="work" type="text" placeholder="np. Warszawa, ul. Krótka 1" />
+<label>Adres docelowy:
+  <input id="end" type="text" placeholder="np. Warszawa, ul. Krótka 1" />
+</label>
+
+<p>
+  <button onclick="otworzMape()">Pokaż trasę w Google Maps</button>
+</p>
+
+<hr>
+
+<label>Odległość w jedną stronę (km):
+  <input id="distance" type="number" step="0.1" min="0" />
+</label>
+
+<label>Szacowany czas przejazdu (minuty):
+  <input id="duration" type="number" step="1" min="0" />
 </label>
 
 <label>Cena paliwa za litr (zł):
@@ -34,67 +49,52 @@
   <input id="days" type="number" min="0" value="20" />
 </label>
 
-<button onclick="oblicz()">Oblicz koszt miesięczny i czas przejazdu</button>
+<button onclick="oblicz()">Oblicz koszt miesięczny</button>
 
 <div id="wynik"></div>
 
 <script>
-  let directionsService;
+  function otworzMape() {
+    const start = encodeURIComponent(document.getElementById('start').value.trim());
+    const end = encodeURIComponent(document.getElementById('end').value.trim());
 
-  function initMap() {
-    // Inicjalizacja DirectionsService do obliczeń tras
-    directionsService = new google.maps.DirectionsService();
+    if (!start || !end) {
+      alert('Proszę podać oba adresy.');
+      return;
+    }
+
+    const url = `https://www.google.com/maps/dir/${start}/${end}/`;
+    window.open(url, '_blank');
   }
 
   function oblicz() {
-    const origin = document.getElementById('home').value.trim();
-    const destination = document.getElementById('work').value.trim();
+    const distance = parseFloat(document.getElementById('distance').value);
+    const duration = parseInt(document.getElementById('duration').value, 10);
     const fuelPrice = parseFloat(document.getElementById('fuelPrice').value);
     const consumption = parseFloat(document.getElementById('consumption').value);
     const days = parseInt(document.getElementById('days').value, 10);
     const wynik = document.getElementById('wynik');
 
-    if (!origin || !destination || isNaN(fuelPrice) || isNaN(consumption) || isNaN(days) || days < 0) {
+    if (isNaN(distance) || isNaN(duration) || isNaN(fuelPrice) || isNaN(consumption) || isNaN(days) ||
+        distance < 0 || duration < 0 || fuelPrice < 0 || consumption < 0 || days < 0) {
       wynik.innerHTML = '<p style="color:red;">Proszę poprawnie uzupełnić wszystkie pola.</p>';
       return;
     }
 
-    if (!directionsService) {
-      wynik.innerHTML = '<p style="color:red;">Mapy Google nie zostały poprawnie załadowane.</p>';
-      return;
-    }
+    const roundTripDistance = distance * 2;
+    const fuelUsedPerDay = (roundTripDistance * consumption) / 100;
+    const costPerDay = fuelUsedPerDay * fuelPrice;
+    const monthlyCost = costPerDay * days;
 
-    directionsService.route({
-      origin,
-      destination,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, (response, status) => {
-      if (status === 'OK') {
-        const leg = response.routes[0].legs[0];
-        const distanceKm = leg.distance.value / 1000;
-        const durationText = leg.duration.text;
-
-        const fuelUsedOneWay = (distanceKm * consumption) / 100;
-        const fuelUsedRoundTrip = fuelUsedOneWay * 2;
-        const costPerDay = fuelUsedRoundTrip * fuelPrice;
-        const monthlyCost = costPerDay * days;
-
-        wynik.innerHTML = `
-          <p><strong>Dystans (w jedną stronę):</strong> ${distanceKm.toFixed(1)} km</p>
-          <p><strong>Średni czas przejazdu (w jedną stronę):</strong> ${durationText}</p>
-          <p><strong>Zużycie paliwa (na jeden dojazd w obie strony):</strong> ${fuelUsedRoundTrip.toFixed(2)} l</p>
-          <p><strong>Koszt dojazdu jednego dnia (tam i z powrotem):</strong> ${costPerDay.toFixed(2)} zł</p>
-          <p><strong>Szacunkowy koszt miesięczny (za ${days} dni):</strong> <strong>${monthlyCost.toFixed(2)} zł</strong></p>
-        `;
-      } else {
-        wynik.innerHTML = '<p style="color:red;">Nie udało się obliczyć trasy. Sprawdź adresy.</p>';
-      }
-    });
+    wynik.innerHTML = `
+      <p><strong>Dystans (w jedną stronę):</strong> ${distance.toFixed(1)} km</p>
+      <p><strong>Czas przejazdu (w jedną stronę):</strong> ${duration} minut</p>
+      <p><strong>Dystans (w obie strony):</strong> ${roundTripDistance.toFixed(1)} km</p>
+      <p><strong>Zużycie paliwa (na jeden dzień):</strong> ${fuelUsedPerDay.toFixed(2)} l</p>
+      <p><strong>Koszt dojazdu jednego dnia:</strong> ${costPerDay.toFixed(2)} zł</p>
+      <p><strong>Szacunkowy koszt miesięczny (za ${days} dni):</strong> <strong>${monthlyCost.toFixed(2)} zł</strong></p>
+    `;
   }
-</script>
-
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key=TU_WKLEJ_SWÓJ_API_KEY&callback=initMap">
 </script>
 
 </body>
