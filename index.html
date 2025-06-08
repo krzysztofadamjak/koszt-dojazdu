@@ -1,297 +1,101 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <title>Kalkulator kosztu dojazdu z aktualnymi cenami paliw</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: auto;
-      padding: 1em;
-    }
-    label {
-      display: block;
-      margin-top: 1em;
-    }
-    input, select, button {
-      width: 100%;
-      padding: 0.5em;
-      margin-top: 0.2em;
-    }
-    #wynik {
-      margin-top: 1em;
-      background: #f0f0f0;
-      border-radius: 8px;
-      padding: 1em;
-    }
-  </style>
+<meta charset="UTF-8" />
+<title>Kalkulator kosztu dojazdu - ręczna cena paliwa</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 1em; }
+  label { display: block; margin-top: 1em; }
+  input, button { width: 100%; padding: 0.5em; margin-top: 0.2em; }
+  #wynik { margin-top: 1em; background: #f0f0f0; padding: 1em; border-radius: 8px; }
+</style>
 </head>
 <body>
-  <h2>Kalkulator kosztu dojazdu z aktualnymi cenami paliw</h2>
 
-  <label>Adres domowy:
-    <input id="home" placeholder="np. Warszawa, ul. Długa 5" />
-  </label>
+<h2>Kalkulator kosztu dojazdu do pracy</h2>
 
-  <label>Adres pracy:
-    <input id="work" placeholder="np. Warszawa, ul. Krótka 1" />
-  </label>
+<label>Adres domowy:
+  <input id="home" type="text" placeholder="np. Warszawa, ul. Długa 5" />
+</label>
 
-  <label>Rodzaj paliwa:
-    <select id="fuel">
-      <option value="95">PB95</option>
-      <option value="98">PB98</option>
-      <option value="ON">Diesel</option>
-      <option value="LPG">LPG</option>
-    </select>
-  </label>
+<label>Adres pracy:
+  <input id="work" type="text" placeholder="np. Warszawa, ul. Krótka 1" />
+</label>
 
-  <label>Województwo (dla cen paliw):
-    <select id="region">
-      <option value="dolnoslaskie">Dolnośląskie</option>
-      <option value="kujawsko-pomorskie">Kujawsko-pomorskie</option>
-      <option value="lubelskie">Lubelskie</option>
-      <option value="lubuskie">Lubuskie</option>
-      <option value="lodzkie">Łódzkie</option>
-      <option value="malopolskie">Małopolskie</option>
-      <option value="mazowieckie">Mazowieckie</option>
-      <option value="opolskie">Opolskie</option>
-      <option value="podkarpackie">Podkarpackie</option>
-      <option value="podlaskie">Podlaskie</option>
-      <option value="pomorskie">Pomorskie</option>
-      <option value="slaskie">Śląskie</option>
-      <option value="swietokrzyskie">Świętokrzyskie</option>
-      <option value="warminsko-mazurskie">Warmińsko-mazurskie</option>
-      <option value="wielkopolskie">Wielkopolskie</option>
-      <option value="zachodniopomorskie">Zachodniopomorskie</option>
-    </select>
-  </label>
+<label>Cena paliwa za litr (zł):
+  <input id="fuelPrice" type="number" step="0.01" min="0" value="5.70" />
+</label>
 
-  <label>Średnie spalanie (l/100 km):
-    <input type="number" id="consumption" value="7.0" step="0.1" />
-  </label>
+<label>Średnie spalanie (l/100 km):
+  <input id="consumption" type="number" step="0.1" min="0" value="7.0" />
+</label>
 
-  <label>Ilość dni dojazdu w miesiącu:
-    <input type="number" id="days" value="20" step="1" />
-  </label>
+<label>Liczba dni dojazdu w miesiącu:
+  <input id="days" type="number" min="0" value="20" />
+</label>
 
-  <button onclick="oblicz()">Oblicz koszt i czas</button>
+<button onclick="oblicz()">Oblicz koszt miesięczny i czas przejazdu</button>
 
-  <div id="wynik"></div>
+<div id="wynik"></div>
 
-  <script>
-    // Geokodowanie przez Nominatim
-    async function geocode(address) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=0`;
-      const resp = await fetch(url, {headers: {'User-Agent': 'Dojazd-Kalkulator/1.0'}});
-      const data = await resp.json();
-      if(data.length === 0) return null;
-      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+<script>
+  let directionsService;
+
+  function initMap() {
+    // Inicjalizacja DirectionsService do obliczeń tras
+    directionsService = new google.maps.DirectionsService();
+  }
+
+  function oblicz() {
+    const origin = document.getElementById('home').value.trim();
+    const destination = document.getElementById('work').value.trim();
+    const fuelPrice = parseFloat(document.getElementById('fuelPrice').value);
+    const consumption = parseFloat(document.getElementById('consumption').value);
+    const days = parseInt(document.getElementById('days').value, 10);
+    const wynik = document.getElementById('wynik');
+
+    if (!origin || !destination || isNaN(fuelPrice) || isNaN(consumption) || isNaN(days) || days < 0) {
+      wynik.innerHTML = '<p style="color:red;">Proszę poprawnie uzupełnić wszystkie pola.</p>';
+      return;
     }
 
-    // Haversine do liczenia odległości w km
-    function haversine(lat1, lon1, lat2, lon2) {
-      const R = 6371; // Ziemia w km
-      const toRad = x => x * Math.PI / 180;
-      const dLat = toRad(lat2 - lat1);
-      const dLon = toRad(lon2 - lon1);
-      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
+    if (!directionsService) {
+      wynik.innerHTML = '<p style="color:red;">Mapy Google nie zostały poprawnie załadowane.</p>';
+      return;
     }
 
-    // Pobierz ceny paliw z API
-    async function pobierzCenyPaliw() {
-      try {
-        const response = await fetch('https://www.koniecpolska.pl/api/ceny-paliw/');
-        const data = await response.json();
+    directionsService.route({
+      origin,
+      destination,
+      travelMode: google.maps.TravelMode.DRIVING
+    }, (response, status) => {
+      if (status === 'OK') {
+        const leg = response.routes[0].legs[0];
+        const distanceKm = leg.distance.value / 1000;
+        const durationText = leg.duration.text;
 
-        // Zmapuj nazwy województw z API do wartości selecta
-        return {
-          dolnoslaskie: {
-            "95": data.dolnoslaskie.pb95,
-            "98": data.dolnoslaskie.pb98,
-            "ON": data.dolnoslaskie.on,
-            "LPG": data.dolnoslaskie.lpg,
-          },
-          kujawsko_pomorskie: {
-            "95": data.kujawsko_pomorskie.pb95,
-            "98": data.kujawsko_pomorskie.pb98,
-            "ON": data.kujawsko_pomorskie.on,
-            "LPG": data.kujawsko_pomorskie.lpg,
-          },
-          lubelskie: {
-            "95": data.lubelskie.pb95,
-            "98": data.lubelskie.pb98,
-            "ON": data.lubelskie.on,
-            "LPG": data.lubelskie.lpg,
-          },
-          lubuskie: {
-            "95": data.lubuskie.pb95,
-            "98": data.lubuskie.pb98,
-            "ON": data.lubuskie.on,
-            "LPG": data.lubuskie.lpg,
-          },
-          lodzkie: {
-            "95": data.lodzkie.pb95,
-            "98": data.lodzkie.pb98,
-            "ON": data.lodzkie.on,
-            "LPG": data.lodzkie.lpg,
-          },
-          malopolskie: {
-            "95": data.malopolskie.pb95,
-            "98": data.malopolskie.pb98,
-            "ON": data.malopolskie.on,
-            "LPG": data.malopolskie.lpg,
-          },
-          mazowieckie: {
-            "95": data.mazowieckie.pb95,
-            "98": data.mazowieckie.pb98,
-            "ON": data.mazowieckie.on,
-            "LPG": data.mazowieckie.lpg,
-          },
-          opolskie: {
-            "95": data.opolskie.pb95,
-            "98": data.opolskie.pb98,
-            "ON": data.opolskie.on,
-            "LPG": data.opolskie.lpg,
-          },
-          podkarpackie: {
-            "95": data.podkarpackie.pb95,
-            "98": data.podkarpackie.pb98,
-            "ON": data.podkarpackie.on,
-            "LPG": data.podkarpackie.lpg,
-          },
-          podlaskie: {
-            "95": data.podlaskie.pb95,
-            "98": data.podlaskie.pb98,
-            "ON": data.podlaskie.on,
-            "LPG": data.podlaskie.lpg,
-          },
-          pomorskie: {
-            "95": data.pomorskie.pb95,
-            "98": data.pomorskie.pb98,
-            "ON": data.pomorskie.on,
-            "LPG": data.pomorskie.lpg,
-          },
-          slaskie: {
-            "95": data.slaskie.pb95,
-            "98": data.slaskie.pb98,
-            "ON": data.slaskie.on,
-            "LPG": data.slaskie.lpg,
-          },
-          swietokrzyskie: {
-            "95": data.swietokrzyskie.pb95,
-            "98": data.swietokrzyskie.pb98,
-            "ON": data.swietokrzyskie.on,
-            "LPG": data.swietokrzyskie.lpg,
-          },
-          warminsko_mazurskie: {
-            "95": data.warminsko_mazurskie.pb95,
-            "98": data.warminsko_mazurskie.pb98,
-            "ON": data.warminsko_mazurskie.on,
-            "LPG": data.warminsko_mazurskie.lpg,
-          },
-          wielkopolskie: {
-            "95": data.wielkopolskie.pb95,
-            "98": data.wielkopolskie.pb98,
-            "ON": data.wielkopolskie.on,
-            "LPG": data.wielkopolskie.lpg,
-          },
-          zachodniopomorskie: {
-            "95": data.zachodniopomorskie.pb95,
-            "98": data.zachodniopomorskie.pb98,
-            "ON": data.zachodniopomorskie.on,
-            "LPG": data.zachodniopomorskie.lpg,
-          }
-        };
-      } catch(e) {
-        console.error("Błąd pobierania cen paliw:", e);
-        return null;
+        const fuelUsedOneWay = (distanceKm * consumption) / 100;
+        const fuelUsedRoundTrip = fuelUsedOneWay * 2;
+        const costPerDay = fuelUsedRoundTrip * fuelPrice;
+        const monthlyCost = costPerDay * days;
+
+        wynik.innerHTML = `
+          <p><strong>Dystans (w jedną stronę):</strong> ${distanceKm.toFixed(1)} km</p>
+          <p><strong>Średni czas przejazdu (w jedną stronę):</strong> ${durationText}</p>
+          <p><strong>Zużycie paliwa (na jeden dojazd w obie strony):</strong> ${fuelUsedRoundTrip.toFixed(2)} l</p>
+          <p><strong>Koszt dojazdu jednego dnia (tam i z powrotem):</strong> ${costPerDay.toFixed(2)} zł</p>
+          <p><strong>Szacunkowy koszt miesięczny (za ${days} dni):</strong> <strong>${monthlyCost.toFixed(2)} zł</strong></p>
+        `;
+      } else {
+        wynik.innerHTML = '<p style="color:red;">Nie udało się obliczyć trasy. Sprawdź adresy.</p>';
       }
-    }
+    });
+  }
+</script>
 
-    async function oblicz() {
-      const home = document.getElementById('home').value.trim();
-      const work = document.getElementById('work').value.trim();
-      const fuel = document.getElementById('fuel').value;
-      const region = document.getElementById('region').value;
-      const consumption = parseFloat(document.getElementById('consumption').value);
-      const days = parseInt(document.getElementById('days').value);
-      const wynik = document.getElementById('wynik');
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key=TU_WKLEJ_SWÓJ_API_KEY&callback=initMap">
+</script>
 
-      wynik.innerHTML = "Ładuję dane i liczę...";
-
-      if(!home || !work || isNaN(consumption) || consumption <= 0 || isNaN(days) || days <= 0) {
-        wynik.innerHTML = "<p style='color:red;'>Proszę uzupełnić poprawnie wszystkie pola.</p>";
-        return;
-      }
-
-      const cenyPaliw = await pobierzCenyPaliw();
-      if (!cenyPaliw) {
-        wynik.innerHTML = "<p style='color:red;'>Nie udało się pobrać cen paliw, spróbuj później.</p>";
-        return;
-      }
-
-      // Mapa kluczy regionów, bo select ma myślniki, a API podkreślniki
-      const regionKeyMap = {
-        "dolnoslaskie": "dolnoslaskie",
-        "kujawsko-pomorskie": "kujawsko_pomorskie",
-        "lubelskie": "lubelskie",
-        "lubuskie": "lubuskie",
-        "lodzkie": "lodzkie",
-        "malopolskie": "malopolskie",
-        "mazowieckie": "mazowieckie",
-        "opolskie": "opolskie",
-        "podkarpackie": "podkarpackie",
-        "podlaskie": "podlaskie",
-        "pomorskie": "pomorskie",
-        "slaskie": "slaskie",
-        "swietokrzyskie": "swietokrzyskie",
-        "warminsko-mazurskie": "warminsko_mazurskie",
-        "wielkopolskie": "wielkopolskie",
-        "zachodniopomorskie": "zachodniopomorskie"
-      };
-
-      const regionKey = regionKeyMap[region];
-      if(!regionKey || !cenyPaliw[regionKey]) {
-        wynik.innerHTML = "<p style='color:red;'>Niepoprawne województwo lub brak danych.</p>";
-        return;
-      }
-
-      const fuelPrice = cenyPaliw[regionKey][fuel];
-      if(!fuelPrice) {
-        wynik.innerHTML = "<p style='color:red;'>Brak ceny dla wybranego paliwa.</p>";
-        return;
-      }
-
-      // Geokodowanie adresów
-      const homeCoords = await geocode(home);
-      const workCoords = await geocode(work);
-
-      if(!homeCoords || !workCoords) {
-        wynik.innerHTML = "<p style='color:red;'>Nie udało się znaleźć współrzędnych dla podanych adresów.</p>";
-        return;
-      }
-
-      const distanceOneWay = haversine(homeCoords.lat, homeCoords.lon, workCoords.lat, workCoords.lon);
-      const avgSpeed = 50; // średnia prędkość km/h
-      const timeHours = distanceOneWay / avgSpeed;
-
-      const fuelUsedOneWay = (distanceOneWay * consumption) / 100;
-      const costOneWay = fuelUsedOneWay * fuelPrice;
-
-      const totalCost = costOneWay * days * 2; // tam i z powrotem
-
-      wynik.innerHTML = `
-        <p><strong>Dystans w jedną stronę:</strong> ${distanceOneWay.toFixed(2)} km</p>
-        <p><strong>Szacowany czas przejazdu (jedna strona):</strong> ${ (timeHours*60).toFixed(0) } min</p>
-        <p><strong>Koszt paliwa na 1 przejazd w jedną stronę:</strong> ${costOneWay.toFixed(2)} zł</p>
-        <p><strong>Ilość dni dojazdu w miesiącu:</strong> ${days}</p>
-        <p><strong>Całkowity koszt paliwa za miesiąc (tam i z powrotem):</strong> <strong>${totalCost.toFixed(2)} zł</strong></p>
-      `;
-    }
-  </script>
 </body>
 </html>
