@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Koszt dojazdu do pracy</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: auto; }
+    input, select, button { margin: 5px 0; width: 100%; padding: 8px; }
+    #wynik { margin-top: 20px; font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1>Miesięczny koszt dojazdu do pracy</h1>
+
+  <label>Województwo:
+    <select id="woj">
+      <option value="">— wybierz —</option>
+      <option value="wielkopolskie">Wielkopolskie</option>
+      <option value="mazowieckie">Mazowieckie</option>
+      <!-- dodaj inne -->
+    </select>
+  </label>
+
+  <label>Liczba km w jedną stronę:
+    <input type="number" id="km" min="1" value="10">
+  </label>
+
+  <label>Dni dojazdu w miesiącu:
+    <input type="number" id="dni" min="1" max="31" value="20">
+  </label>
+
+  <label>Rodzaj paliwa:
+    <select id="paliwo">
+      <option value="95">PB95</option>
+      <option value="98">PB98</option>
+      <option value="ON">Diesel</option>
+      <option value="LPG">LPG</option>
+    </select>
+  </label>
+
+  <label>Średnie spalanie (l/100 km):
+    <input type="number" id="spalanie" min="1" step="0.1" value="7.5">
+  </label>
+
+  <button id="oblicz">Oblicz koszt</button>
+
+  <div id="wynik"></div>
+
+  <script>
+    document.getElementById('oblicz').addEventListener('click', async () => {
+      const woj = document.getElementById('woj').value;
+      const km = parseFloat(document.getElementById('km').value);
+      const dni = parseInt(document.getElementById('dni').value);
+      const paliwo = document.getElementById('paliwo').value;
+      const spalanie = parseFloat(document.getElementById('spalanie').value);
+      const wynikEl = document.getElementById('wynik');
+
+      if (!woj || !km || !dni || !spalanie) {
+        wynikEl.textContent = 'Uzupełnij wszystkie pola.';
+        return;
+      }
+
+      wynikEl.textContent = 'Pobieram ceny paliw…';
+
+      try {
+        const res = await fetch(`/api/ceny-paliw?wojewodztwo=${woj}`);
+        const data = await res.json();
+        const cena = parseFloat(data[paliwo]);
+
+        if (isNaN(cena)) {
+          wynikEl.textContent = 'Brak ceny dla wybranego paliwa/województwa.';
+          return;
+        }
+
+        const dzienneKm = km * 2;
+        const miesięcznyKm = dzienneKm * dni;
+        const zuzycie = miesięcznyKm * spalanie / 100;
+        const koszt = zuzycie * cena;
+
+        wynikEl.innerHTML = `
+          <p><strong>Cena paliwa:</strong> ${cena.toFixed(2)} zł/l (stan na ${data.aktualizacja})</p>
+          <p><strong>Przebieg miesięczny:</strong> ${miesięcznyKm.toFixed(1)} km</p>
+          <p><strong>Średnie spalanie:</strong> ${spalanie.toFixed(1)} l/100 km</p>
+          <p><strong>Zużycie:</strong> ${zuzycie.toFixed(1)} l</p>
+          <p><strong>Koszt paliwa:</strong> <em>${koszt.toFixed(2)} zł</em></p>
+        `;
+      } catch (e) {
+        console.error(e);
+        wynikEl.textContent = 'Błąd podczas pobierania cen paliw.';
+      }
+    });
+  </script>
+</body>
+</html>
